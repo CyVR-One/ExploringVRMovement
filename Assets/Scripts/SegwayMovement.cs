@@ -1,50 +1,36 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR;
 
 public class SegwayMovement : MonoBehaviour
 {
-    // Speed of the segway
     public float speed = 1.0f;
+    public Transform headTransform; // Drag your VR headset transform here in the inspector.
 
-    // Sensitivity of the tilt input
-    public float tiltSensitivity = 0.1f;
+    private Vector3 initialHeadLocalPosition;
 
-    // Minimum tilt required to start moving
-    public float minTilt = 0.2f;
-
-    private InputDevice device;
-    private Quaternion currentTilt;
-    private Vector3 direction;
-
-    private void Start()
+    void Start()
     {
-        // Get the input device representing the VR headset
-        var devices = new List<InputDevice>();
-        InputDevices.GetDevicesAtXRNode(XRNode.Head, devices);
-        if (devices.Count > 0)
-        {
-            device = devices[0];
-        }
+        // We assume that at the start, player stands upright.
+        initialHeadLocalPosition = headTransform.localPosition;
     }
 
-    private void Update()
+    void Update()
     {
-        // Get the current tilt of the headset
-        device.TryGetFeatureValue(CommonUsages.deviceRotation, out currentTilt);
+        // The tilt is calculated as the current head position relative to the initial head position.
+        // We only care about the X (sideways tilt) and Z (forward/backward tilt) components.
+        Vector3 tilt = headTransform.localPosition - initialHeadLocalPosition;
+        tilt.y = 0; 
 
-        // Convert the tilt into a forward direction
-        direction = new Vector3(currentTilt.x, 0, currentTilt.z);
+        // Here, tilt magnitude gives an indication of how much the player is leaning.
+        float tiltMagnitude = tilt.magnitude;
 
-        // If the headset is tilted enough forward or backward, start moving
-        if (Mathf.Abs(currentTilt.x) > minTilt || Mathf.Abs(currentTilt.z) > minTilt)
-        {
-            // Normalize the direction and scale it by the speed and the frame duration
-            direction.Normalize();
-            direction *= speed * Time.deltaTime;
+        // We get the direction of tilt and normalize it.
+        Vector3 tiltDirection = tilt.normalized;
 
-            // Apply the movement to the camera rig
-            transform.position += transform.TransformDirection(direction);
-        }
+        // We use the tilt magnitude to modulate the speed of the segway. The more the user leans, the faster the segway moves.
+        Vector3 movement = tiltDirection * tiltMagnitude * speed * Time.deltaTime;
+
+        // Finally, we apply this movement to the segway (or VR Rig).
+        transform.position += movement;
     }
 }

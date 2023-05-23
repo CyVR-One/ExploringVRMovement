@@ -9,25 +9,85 @@ public class FlyingScript : MonoBehaviour
     private InputDevice rightHandDevice;
 
     // Flight parameters
+    [Tooltip("Distance between hands required to initiate a flap")]
     public float flapThreshold = 0.3f;
-    public float closeThreshold = 0.2f;
-    public float flapPower = 10f;
-    public float flapBoost = 5f;
-    public float speedUpFactor = 2f;
-    public float glideFactor = 1f;
-    public float flightDrag = 0.05f;
-    public float speedChangeRate = 1f; 
-    public float baseSpeed = 10f;
-    public float glideSpeedThreshold = 0.1f; 
-    public float glideDrag = 0.02f; 
-    public float minGlideForce = 1f; // You can adjust this value based on your needs
 
-    public float forwardTiltFactor = 1.0f; 
+    [Tooltip("Distance between hands required to speed up during flap")]
+    public float closeThreshold = 0.2f;
+
+    [Tooltip("Strength of the upward force applied during a flap")]
+    public float flapPower = 10f;
+
+    [Tooltip("Additional boost given when initiating a flap")]
+    public float flapBoost = 5f;
+
+    [Tooltip("Factor by which speed increases when hands are close together")]
+    public float speedUpFactor = 2f;
+
+    [Tooltip("Factor that determines the efficiency of gliding, affects the player's ability to maintain height and speed during a glide")]
+    public float glideFactor = 1f;
+
+    [Tooltip("Drag applied to the player during flight, slowing them down")]
+    public float flightDrag = 0.05f;
+
+    [Tooltip("Rate at which the player's speed changes towards the target speed")]
+    public float speedChangeRate = 1f; 
+
+    [Tooltip("Base speed of the player in flight")]
+    public float baseSpeed = 10f;
+
+    [Tooltip("Threshold at which player's speed is low enough to start applying glide drag")]
+    public float glideSpeedThreshold = 0.1f; 
+
+    [Tooltip("Drag applied to the player during a glide, slowing them down")]
+    public float glideDrag = 0.02f;
+
+    [Tooltip("Minimum force that will be applied during a glide, even when player's hands are close to their head")]
+    public float minGlideForce = 1f;
+
+    [Tooltip("Factor that determines how much player's forward tilt affects their forward movement")]
+    public float forwardTiltFactor = 1.0f;
+
+    [Tooltip("Factor that determines the strength of player's turning or banking ability")]
     public float turnFactor;
 
+    [Tooltip("Coefficient used in the lift equation, affects the amount of lift generated during flight")]
     public float liftCoefficient = 1.0f;
+
+    [Tooltip("Representative area of player's wings used in the lift equation, affects the amount of lift generated during flight")]
     public float wingArea = 1.0f;
+
+    [Tooltip("Density of the air used in the lift equation, affects the amount of lift generated during flight")]
     public float airDensity = 1.225f;
+
+    [Tooltip("Distance to cast the ground check ray")]
+    public float groundCheckDistance = 0.2f;
+    [Tooltip("The force applied to the player during a glide")]
+    public float glideForce = 10f;
+
+    [Tooltip("The smoothness with which the player transitions between different glide forces")]
+    public float glideSmoothness = 5f;
+
+    [Tooltip("The smoothness with which the player turns")]
+
+    public float maxForwardSpeed = 10.0f; // Set this value to the maximum forward speed of the player
+
+    private float currentTurnSpeed = 0f;
+    private const float turnSmoothness = 5f;
+    private const float directionChangeSmoothness = 5f;
+
+    private float? turningDirection = null;
+    private const float turnThreshold = 0.1f; 
+
+    //Control position variables
+    private Vector3 leftHandPos;
+    private Vector3 rightHandPos;
+    private Vector3 leftHandMovement;
+    private Vector3 rightHandMovement;
+    private Vector3 headsetPosition;
+    private Quaternion headsetRotation;
+
+
 
     
 
@@ -51,43 +111,50 @@ public class FlyingScript : MonoBehaviour
     {
         InitializeControllers();
         InitializeHeadset();
-        Vector3 leftHandPos, rightHandPos;
+        // Get the hand and headset positions.
         bool areHandsActive = GetHandPositions(out leftHandPos, out rightHandPos);
         if (!areHandsActive) return;
 
-        Vector3 headsetPos;
-        bool isHeadsetActive = GetHeadsetPosition(out headsetPos);
+        bool isHeadsetActive = GetHeadsetPosition(out headsetPosition);
         if (!isHeadsetActive) return;
 
-        float handDistance = Vector3.Distance(leftHandPos, rightHandPos);
-        Vector3 leftHandMovement = leftHandPos - leftHandPosOld;
-        Vector3 rightHandMovement = rightHandPos - rightHandPosOld;
-        float avgFlapSpeed = GetAverageFlapSpeed(leftHandMovement, rightHandMovement);
+        // Calculate hand movement and flap speed.
+        leftHandMovement = leftHandPos - leftHandPosOld;
+        rightHandMovement = rightHandPos - rightHandPosOld;
 
-        bool isFlapMode = IsFlapMode(leftHandPos, rightHandPos, headsetPos);
-        bool isGlideMode = IsGlideMode(leftHandPos, rightHandPos, headsetPos);
+        // Calculate the average flap speed.
+        float avgFlapSpeed = GetAverageFlapSpeed();
+
+        // Determine whether the user is in flap or glide mode.
+        bool isFlapMode = IsFlapMode();
+        bool isGlideMode = IsGlideMode();
 
         // Use isFlapMode and isGlideMode instead of handDistance and avgFlapSpeed to determine whether to flap or glide
         if (isFlapMode)
         {
-            FlapWings(leftHandPos, rightHandPos, leftHandMovement, rightHandMovement, avgFlapSpeed);
-            ChangeSpeed(handDistance, avgFlapSpeed);
+            FlapWings();
+            ChangeSpeed();
         }
-        if (isGlideMode) Glide(leftHandPos, rightHandPos, headsetPos);
 
-        Turn(leftHandPos, rightHandPos);
+        if (isGlideMode)
+        {
+            Glide();
+        }
+
+        Turn();
         MoveForward();
 
-        // Store current hand positions for the next frame
+        // Store current hand positions for the next frame.
         leftHandPosOld = leftHandPos;
         rightHandPosOld = rightHandPos;
 
-        // Update flap cooldown
+        // Update flap cooldown.
         if (flapCooldown > 0) 
             flapCooldown -= Time.deltaTime;
 
         CorrectTilt();
     }
+
 
     private void InitializeControllers()
     {
@@ -123,6 +190,10 @@ public class FlyingScript : MonoBehaviour
     private void InitializeHeadset()
     {
         headDevice = InputDevices.GetDeviceAtXRNode(XRNode.Head);
+        if (headDevice.TryGetFeatureValue(CommonUsages.deviceRotation, out Quaternion rotation))
+        {
+            headsetRotation = rotation;
+        }
     }
 
     private bool GetHeadsetPosition(out Vector3 headsetPos)
@@ -132,49 +203,61 @@ public class FlyingScript : MonoBehaviour
         if (!headsetActive)
             Debug.Log("Headset not found");
 
-        return headsetActive;
+        // update rotation
+        if (headDevice.TryGetFeatureValue(CommonUsages.deviceRotation, out Quaternion rotation))
+        {
+            headsetRotation = rotation;
+        }
+
+        return headDevice.isValid;
     }
 
-    private bool IsFlapMode(Vector3 leftHandPos, Vector3 rightHandPos, Vector3 headsetPos)
+    private bool IsFlapMode()
     {
-        // Consider it flapping mode if either hand is in front of or in line with the headset
-        bool isFlapMode = leftHandPos.z >= headsetPos.z || rightHandPos.z >= headsetPos.z;
-        if(isFlapMode)
+        bool isFlapMode = (leftHandPos.z >= headsetPosition.z || rightHandPos.z >= headsetPosition.z) && GetAverageFlapSpeed() > flapThreshold;
+        if (isFlapMode)
             Debug.Log("Entered Flap Mode");
         return isFlapMode;
     }
 
-    private bool IsGlideMode(Vector3 leftHandPos, Vector3 rightHandPos, Vector3 headsetPos)
+
+    private bool IsGlideMode()
     {
-        // Consider it gliding mode if both hands are behind the headset
-        bool isGlideMode = leftHandPos.z < headsetPos.z && rightHandPos.z < headsetPos.z;
-    
-        if(isGlideMode)
+        bool isGlideMode = !IsGrounded() && leftHandPos.z < headsetPosition.z && rightHandPos.z < headsetPosition.z;
+        if (isGlideMode)
             Debug.Log("Entered Glide Mode");
-        
         return isGlideMode;
     }
 
-    private float GetAverageFlapSpeed(Vector3 leftHandMovement, Vector3 rightHandMovement)
+    private bool IsGrounded()
+    {
+        return Physics.Raycast(transform.position, -Vector3.up, groundCheckDistance);
+    }
+
+
+    private float GetAverageFlapSpeed()
     {
         float leftHandSpeed = leftHandMovement.magnitude / Time.deltaTime;
         float rightHandSpeed = rightHandMovement.magnitude / Time.deltaTime;
         float avgFlapSpeed = (leftHandSpeed + rightHandSpeed) / 2f;
 
-        return (leftHandSpeed + rightHandSpeed) / 2f;
+        return avgFlapSpeed;
     }
 
-    private void FlapWings(Vector3 leftHandPos, Vector3 rightHandPos, Vector3 leftHandMovement, Vector3 rightHandMovement, float avgFlapSpeed)
+
+    private void FlapWings()
     {
-        if (IsFlapConditionMet(leftHandPos, rightHandPos, leftHandMovement, rightHandMovement, avgFlapSpeed) && flapCooldown <= 0)
+        float avgFlapSpeed = GetAverageFlapSpeed();
+        if (IsFlapConditionMet() && flapCooldown <= 0)
         {
             isFlapping = true;
             Vector3 flapForce = Vector3.up * flapPower * ((Mathf.Abs(leftHandMovement.y) + Mathf.Abs(rightHandMovement.y)) / 2);
 
             // Subtract a fraction of the forward velocity from the flap force
             float forwardForce = rb.velocity.z;
+
             flapForce -= new Vector3(0, 0, forwardForce * 0.2f);  // Adjust the 0.8f to your preference
-            
+            Debug.Log("Player velocity before flap: " + rb.velocity );
             Debug.Log("Applying flap force: " + flapForce);
             rb.AddForce(flapForce, ForceMode.Impulse);
             Debug.Log("Player velocity after flap: " + rb.velocity);
@@ -187,25 +270,22 @@ public class FlyingScript : MonoBehaviour
     }
 
 
-    private bool IsFlapConditionMet(Vector3 leftHandPos, Vector3 rightHandPos, Vector3 leftHandMovement, Vector3 rightHandMovement, float avgFlapSpeed)
+    private bool IsFlapConditionMet()
     {
         float handDistance = Vector3.Distance(leftHandPos, rightHandPos);
-
-        // Check the conditions for a flap: hands moving down quickly and spread apart
+        float avgFlapSpeed = GetAverageFlapSpeed();
         if (handDistance > flapThreshold && avgFlapSpeed > flapThreshold && 
             leftHandMovement.y < 0 && rightHandMovement.y < 0)
         {
             return true;
         }
-
         return false;
     }
 
-
-
-
-    private void ChangeSpeed(float handDistance, float avgFlapSpeed)
+    private void ChangeSpeed()
     {
+        float handDistance = Vector3.Distance(leftHandPos, rightHandPos);
+        float avgFlapSpeed = GetAverageFlapSpeed();
         // If hands are close together, apply forward force (speed up)
         if (handDistance < closeThreshold)
         {
@@ -222,21 +302,22 @@ public class FlyingScript : MonoBehaviour
         rb.velocity = rb.velocity.normalized * newSpeed;
     }
 
-    private void Glide(Vector3 leftHandPos, Vector3 rightHandPos, Vector3 headsetPosition)
+    private void Glide()
     {
-        if (!isFlapping)
+        if (!isFlapping && !IsGrounded())
         {
+            float glideRatio = GetGlideRatio();
+            float avgFlapSpeed = GetAverageFlapSpeed();
+            float handDistance = Vector3.Distance(leftHandPos, rightHandPos);
 
-            float glideRatio = GetGlideRatio(leftHandPos, rightHandPos, headsetPosition);
-        
-            // Add forward force based on glide ratio, with some minimum force to keep gliding even with hands close to head
-            rb.AddForce(transform.forward * (glideFactor * glideRatio + minGlideForce), ForceMode.Force);
-            Vector3 handVector = rightHandPos - leftHandPos;
-            float tiltAngle = Vector3.Angle(handVector, transform.up);
-            Vector3 glideDirection = Quaternion.AngleAxis(tiltAngle, transform.forward) * transform.up;
-            Vector3 newForward = Vector3.Lerp(transform.forward, glideDirection, glideFactor);
-            Quaternion targetRotation = Quaternion.FromToRotation(transform.forward, newForward);
-            rb.rotation = Quaternion.RotateTowards(rb.rotation, targetRotation, glideFactor * Time.deltaTime);
+            // Calculate glide force
+            float newGlideForce = glideFactor * glideRatio + minGlideForce;
+
+            // Smoothly transition between old and new glide force
+            glideForce = Mathf.Lerp(glideForce, newGlideForce, Time.deltaTime * glideSmoothness);
+
+            // Add forward force based on glide force
+            rb.AddForce(transform.forward * glideForce, ForceMode.Force);
 
             // Adjust velocity to maintain forward momentum
             if (rb.velocity.magnitude < glideSpeedThreshold)
@@ -250,46 +331,147 @@ public class FlyingScript : MonoBehaviour
             {
                 rb.AddForce(transform.forward * glideFactor, ForceMode.Force); // Add forward force during glide
             }
+
+            // Add these inside the Glide() function
+            //ChangeSpeed(handDistance, avgFlapSpeed);
+            //Turn(leftHandPos, rightHandPos);
+            MoveForward();
         }
     }
 
-
-
-
-
-
-    private void Turn(Vector3 leftHandPos, Vector3 rightHandPos)
+    /*private void Turn()
     {
         // Calculate the turn direction based on the relative height of the hands
-        float turnDirection = rightHandPos.y - leftHandPos.y;
-        Vector3 bankingAxis = Vector3.Cross(transform.up, transform.forward);
+        float newTurningDirection = rightHandPos.y - leftHandPos.y;
 
-        // Apply the rotation. This creates a banking effect, like an airplane
-        rb.rotation *= Quaternion.AngleAxis(turnDirection * turnFactor, bankingAxis);
-        
-        // If the player is not trying to turn, apply a rotation to correct back to upright
-        if (Mathf.Approximately(turnDirection, 0))
+        // If the hands are almost at the same height, stop turning
+        if (Mathf.Abs(newTurningDirection) < turnThreshold)
         {
-            // Compute the correction rotation as a quaternion
-            Quaternion correction = Quaternion.FromToRotation(rb.transform.up, Vector3.up);
-            
-            // Apply the correction rotation, scaled by some factor to control the speed of correction
-            float correctionSpeed = 1f;  // Adjust this value to your liking
-            rb.rotation *= Quaternion.Lerp(Quaternion.identity, correction, correctionSpeed * Time.deltaTime);
+            turningDirection = null;
+            Debug.Log("Not Turning");
+        }
+        else
+        {
+            // If we're already turning
+            if (turningDirection.HasValue)
+            {
+                // And the new turn direction is in the opposite direction, interpolate the turningDirection towards the new direction
+                if (Mathf.Sign(newTurningDirection) != Mathf.Sign(turningDirection.Value))
+                {
+                    Debug.Log("Changing Turning Direction");
+                    turningDirection = Mathf.Lerp(turningDirection.Value, newTurningDirection, Time.deltaTime * directionChangeSmoothness);
+                }
+            }
+            else  // We're not currently turning, so start turning in the new direction
+            {
+                turningDirection = newTurningDirection;
+            }
+
+            // If we're turning, apply the rotation
+            if (turningDirection.HasValue)
+            {
+                // Calculate turn modifier based on forward speed
+                float turnModifier = Mathf.Clamp(rb.velocity.magnitude / maxForwardSpeed, 0, 1);
+
+                // Interpolate the currentTurnSpeed towards the desired speed
+                float desiredTurnSpeed = Mathf.Abs(newTurningDirection) * turnFactor * turnModifier;
+                currentTurnSpeed = Mathf.Lerp(currentTurnSpeed, desiredTurnSpeed, Time.deltaTime * turnSmoothness);
+
+                // Apply the rotation. This creates a banking effect, like an airplane.
+                Vector3 bankingAxis = Vector3.Cross(transform.up, transform.forward);
+                rb.rotation *= Quaternion.AngleAxis(currentTurnSpeed, bankingAxis);
+
+                // Apply the steering force
+                Vector3 steeringForce = transform.right * Mathf.Sign(turningDirection.Value) * currentTurnSpeed * rb.velocity.magnitude;
+                rb.AddForce(steeringForce, ForceMode.Force);
+
+                // Log the direction of the turn
+                if(turningDirection.Value > 0)
+                    Debug.Log("Turning Left by " + currentTurnSpeed.ToString() + " degrees");
+                else
+                    Debug.Log("Turning Right by " + currentTurnSpeed.ToString() + " degrees");
+            }
+        }
+    }*/
+
+    private void Turn()
+    {
+        if(!isFlapping){
+            Vector3 headsetForward = headsetRotation * Vector3.forward;
+
+            Vector3 headToRightHand = rightHandPos - headsetPosition;
+            Vector3 headToLeftHand = leftHandPos - headsetPosition;
+
+            float rightHandBankAngle = Vector3.Angle(headsetForward, headToRightHand);
+            float leftHandBankAngle = Vector3.Angle(headsetForward, headToLeftHand);
+
+            float newTurningDirection = leftHandBankAngle - rightHandBankAngle;
+
+
+
+            // If the hands are almost at the same banking angle, stop turning
+            if (Mathf.Abs(newTurningDirection) < turnThreshold)
+            {
+                turningDirection = null;
+                Debug.Log("Not Turning");
+            }
+            else
+            {
+                // If we're already turning
+                if (turningDirection.HasValue)
+                {
+                    // And the new turn direction is in the opposite direction, interpolate the turningDirection towards the new direction
+                    if (Mathf.Sign(newTurningDirection) != Mathf.Sign(turningDirection.Value))
+                    {
+                        Debug.Log("Changing Turning Direction");
+                        turningDirection = Mathf.Lerp(turningDirection.Value, newTurningDirection, Time.deltaTime * directionChangeSmoothness);
+                    }
+                }
+                else  // We're not currently turning, so start turning in the new direction
+                {
+                    turningDirection = newTurningDirection;
+                }
+
+                // If we're turning, apply the rotation
+                if (turningDirection.HasValue)
+                {
+                    // Calculate turn modifier based on forward speed
+                    float turnModifier = Mathf.Clamp(rb.velocity.magnitude / maxForwardSpeed, 0, 1);
+
+                    // Interpolate the currentTurnSpeed towards the desired speed
+                    float desiredTurnSpeed = Mathf.Abs(newTurningDirection) * turnFactor * turnModifier;
+                    currentTurnSpeed = Mathf.Lerp(currentTurnSpeed, desiredTurnSpeed, Time.deltaTime * turnSmoothness);
+                    Debug.Log("turn speed: " + currentTurnSpeed);
+                    // Apply the rotation. This creates a banking effect, like an airplane.
+                    Vector3 bankingAxis = Vector3.Cross(transform.up, transform.forward);
+                    Debug.DrawRay(rb.position, bankingAxis, Color.green);
+
+                    //rb.rotation *= Quaternion.AngleAxis(currentTurnSpeed, bankingAxis);
+
+                    // Log the direction of the turn
+                    if(turningDirection.Value > 0)
+                        Debug.Log("Turning Left by " + currentTurnSpeed.ToString() + " degrees");
+                    else
+                        Debug.Log("Turning Right by " + currentTurnSpeed.ToString() + " degrees");
+                }
+            }
         }
     }
+
 
 
 
     private void MoveForward()
     {
-        InputDevice headDevice = InputDevices.GetDeviceAtXRNode(XRNode.Head);
-        Quaternion headRotation;
-        headDevice.TryGetFeatureValue(CommonUsages.deviceRotation, out headRotation);
-        Vector3 headForward = headRotation * Vector3.forward;
+        if(!IsGrounded()){
+            InputDevice headDevice = InputDevices.GetDeviceAtXRNode(XRNode.Head);
+            Quaternion headRotation;
+            headDevice.TryGetFeatureValue(CommonUsages.deviceRotation, out headRotation);
+            Vector3 headForward = headRotation * Vector3.forward;
 
-        if (headForward.y < 0) 
-            rb.AddForce(transform.forward * -headForward.y * forwardTiltFactor);
+            if (headForward.y < 0) 
+                rb.AddForce(transform.forward * -headForward.y * forwardTiltFactor);
+        }
     }
 
     private void CorrectTilt()
@@ -303,10 +485,10 @@ public class FlyingScript : MonoBehaviour
     }
 
 
-    private float GetGlideRatio(Vector3 leftHandPos, Vector3 rightHandPos, Vector3 headsetPos)
+    private float GetGlideRatio()
     {
-        float leftHandDistance = Vector3.Distance(leftHandPos, headsetPos);
-        float rightHandDistance = Vector3.Distance(rightHandPos, headsetPos);
+        float leftHandDistance = Vector3.Distance(leftHandPos, headsetPosition);
+        float rightHandDistance = Vector3.Distance(rightHandPos, headsetPosition);
         float averageDistance = (leftHandDistance + rightHandDistance) / 2;
 
         float maxGlideDistance = 1.0f; // You may need to adjust this based on your VR setup
