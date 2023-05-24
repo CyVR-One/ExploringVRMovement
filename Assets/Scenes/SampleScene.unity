@@ -670,27 +670,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2c57b246910a2834da8c798ae67aec21, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  flapThreshold: 0.3
+  flapThreshold: 0.2
   closeThreshold: 0.2
-  flapPower: 500
-  flapBoost: 5
+  flapPower: 20
   speedUpFactor: 2
-  glideFactor: 50
-  flightDrag: 0.05
+  glideFactor: 100
   speedChangeRate: 1
   baseSpeed: 5
   glideSpeedThreshold: 0.1
   glideDrag: 0.02
   minGlideForce: 1
-  forwardTiltFactor: 50
-  turnFactor: 1
-  liftCoefficient: 1
-  wingArea: 1
-  airDensity: 1.225
+  forwardTiltFactor: 25
   groundCheckDistance: 0.2
   glideForce: 50
-  glideSmoothness: 2.5
-  maxForwardSpeed: 10
+  glideSmoothness: 5
 --- !u!54 &1985992501
 Rigidbody:
   m_ObjectHideFlags: 0
