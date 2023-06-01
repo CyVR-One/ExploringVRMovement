@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR;
 
-public class VelocityTracker : MonoBehaviour
+public class ControllerVelocity : MonoBehaviour
 {
     public XRNode leftHand = XRNode.LeftHand;
     public XRNode rightHand = XRNode.RightHand;

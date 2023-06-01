@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.XR;
 
-public class HandJetpack : MonoBehaviour
+public class PointDirection : MonoBehaviour
 {
     public XRNode leftControllerNode = XRNode.LeftHand;
     public XRNode rightControllerNode = XRNode.RightHand;
@@ -9,7 +9,6 @@ public class HandJetpack : MonoBehaviour
     private InputDevice rightDevice;
 
     public float maxJetpackForce = 10f;
-    public float maxTurningForce = 1f; // Adjust as needed
     private Rigidbody rb;
 
     void Start()
@@ -32,23 +31,11 @@ public class HandJetpack : MonoBehaviour
         rightDevice.TryGetFeatureValue(CommonUsages.deviceRotation, out Quaternion rightHandRotation);
 
         // Compute force direction based on controller orientation 
-        Vector3 leftForceDirection = leftHandRotation * Vector3.down;  // Now using down direction
-        Vector3 rightForceDirection = rightHandRotation * Vector3.down;  // Now using down direction
+        Vector3 leftForceDirection = leftHandRotation * Vector3.up;    // Now using up direction
+        Vector3 rightForceDirection = rightHandRotation * Vector3.up;  // Now using up direction
 
-        // Apply force proportional to the trigger value in the opposite direction
+        // Apply force proportional to the trigger value in opposite direction
         rb.AddForce(-leftForceDirection * maxJetpackForce * leftTriggerValue);
         rb.AddForce(-rightForceDirection * maxJetpackForce * rightTriggerValue);
-
-        // If only one trigger is pressed, apply a turning force
-        if (leftTriggerValue > 0f && rightTriggerValue == 0f)
-        {
-            // Left trigger pressed - turn right
-            rb.AddTorque(transform.up * maxTurningForce * leftTriggerValue, ForceMode.VelocityChange);
-        }
-        else if (rightTriggerValue > 0f && leftTriggerValue == 0f)
-        {
-            // Right trigger pressed - turn left
-            rb.AddTorque(-transform.up * maxTurningForce * rightTriggerValue, ForceMode.VelocityChange);
-        }
     }
 }

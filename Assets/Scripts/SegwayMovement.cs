@@ -4,14 +4,19 @@ using UnityEngine.XR;
 public class SegwayMovement : MonoBehaviour
 {
     public float speed = 1.0f;
+    public float rotationSpeed = 30.0f; // speed of rotation
     public Transform headTransform; // Drag your VR headset transform here in the inspector.
 
     private Vector3 initialHeadLocalPosition;
+    private float maxZTilt = 0.0f;
+    private float minZTilt = 0.0f;
 
     void Start()
     {
         // We assume that at the start, player stands upright.
         initialHeadLocalPosition = headTransform.localPosition;
+        maxZTilt = initialHeadLocalPosition.z;
+        minZTilt = initialHeadLocalPosition.z;
     }
 
     void Update()
@@ -21,16 +26,23 @@ public class SegwayMovement : MonoBehaviour
         Vector3 tilt = headTransform.localPosition - initialHeadLocalPosition;
         tilt.y = 0; 
 
-        // Here, tilt magnitude gives an indication of how much the player is leaning.
-        float tiltMagnitude = tilt.magnitude;
+        // Update the maximum and minimum Z tilt values
+        maxZTilt = Mathf.Max(maxZTilt, headTransform.localPosition.z);
+        minZTilt = Mathf.Min(minZTilt, headTransform.localPosition.z);
 
-        // We get the direction of tilt and normalize it.
-        Vector3 tiltDirection = tilt.normalized;
+        // Normalize the Z tilt value to be in the range [-1, 1]
+        float normalizedZTilt = (headTransform.localPosition.z - minZTilt) / (maxZTilt - minZTilt) * 2 - 1;
 
-        // We use the tilt magnitude to modulate the speed of the segway. The more the user leans, the faster the segway moves.
-        Vector3 movement = tiltDirection * tiltMagnitude * speed * Time.deltaTime;
+        // We determine the rotation based on the tilt to the left or right
+        float rotation = tilt.x * rotationSpeed * Time.deltaTime;
 
-        // Finally, we apply this movement to the segway (or VR Rig).
-        transform.position += movement;
+        // We use the normalized Z tilt value to modulate the speed of the segway.
+        Vector3 movement = new Vector3(0, 0, normalizedZTilt) * speed * Time.deltaTime;
+
+        // Apply the rotation to the VR Rig
+        transform.Rotate(0, rotation, 0);
+
+        // Apply the movement to the VR Rig
+        transform.Translate(movement, Space.Self);
     }
 }
